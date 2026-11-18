@@ -1,0 +1,198 @@
+{
+  "schema_version": 3,
+  "codex_version": "0.167.2",
+  "platforms": {
+    "linux-ubuntu-x64": {
+      "profiles": {
+        "xterm-256color": {
+          "CLI": "codex-tui/0.167.2 (Ubuntu 24.4.0; x86_64) xterm-256color (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Ubuntu 24.4.0; x86_64) xterm-256color (codex_exec; 0.167.2)"
+        },
+        "WindowsTerminal": {
+          "CLI": "codex-tui/0.167.2 (Ubuntu 24.4.0; x86_64) WindowsTerminal (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Ubuntu 24.4.0; x86_64) WindowsTerminal (codex_exec; 0.167.2)"
+        },
+        "vscode": {
+          "CLI": "codex-tui/0.167.2 (Ubuntu 24.4.0; x86_64) vscode/1.146.0 (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Ubuntu 24.4.0; x86_64) vscode/1.146.0 (codex_exec; 0.167.2)"
+        },
+        "herdr": {
+          "CLI": "codex-tui/0.167.2 (Ubuntu 24.4.0; x86_64) herdr/0.9.5 (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Ubuntu 24.4.0; x86_64) herdr/0.9.5 (codex_exec; 0.167.2)"
+        }
+      }
+    },
+    "linux-ubuntu-arm64": {
+      "profiles": {
+        "xterm-256color": {
+          "CLI": "codex-tui/0.167.2 (Ubuntu 24.4.0; aarch64) xterm-256color (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Ubuntu 24.4.0; aarch64) xterm-256color (codex_exec; 0.167.2)"
+        },
+        "WindowsTerminal": {
+          "CLI": "codex-tui/0.167.2 (Ubuntu 24.4.0; aarch64) WindowsTerminal (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Ubuntu 24.4.0; aarch64) WindowsTerminal (codex_exec; 0.167.2)"
+        },
+        "vscode": {
+          "CLI": "codex-tui/0.167.2 (Ubuntu 24.4.0; aarch64) vscode/1.146.0 (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Ubuntu 24.4.0; aarch64) vscode/1.146.0 (codex_exec; 0.167.2)"
+        },
+        "herdr": {
+          "CLI": "codex-tui/0.167.2 (Ubuntu 24.4.0; aarch64) herdr/0.9.5 (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Ubuntu 24.4.0; aarch64) herdr/0.9.5 (codex_exec; 0.167.2)"
+        }
+      }
+    },
+    "linux-debian-x64": {
+      "profiles": {
+        "xterm-256color": {
+          "CLI": "codex-tui/0.167.2 (Debian 13.0.0; x86_64) xterm-256color (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Debian 13.0.0; x86_64) xterm-256color (codex_exec; 0.167.2)"
+        },
+        "WindowsTerminal": null,
+        "vscode": null,
+        "herdr": {
+          "CLI": "codex-tui/0.167.2 (Debian 13.0.0; x86_64) herdr/0.9.5 (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Debian 13.0.0; x86_64) herdr/0.9.5 (codex_exec; 0.167.2)"
+        }
+      }
+    },
+    "linux-debian-arm64": {
+      "profiles": {
+        "xterm-256color": {
+          "CLI": "codex-tui/0.167.2 (Debian 13.0.0; aarch64) xterm-256color (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Debian 13.0.0; aarch64) xterm-256color (codex_exec; 0.167.2)"
+        },
+        "WindowsTerminal": null,
+        "vscode": null,
+        "herdr": {
+          "CLI": "codex-tui/0.167.2 (Debian 13.0.0; aarch64) herdr/0.9.5 (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Debian 13.0.0; aarch64) herdr/0.9.5 (codex_exec; 0.167.2)"
+        }
+      }
+    },
+    "linux-fedora-x64": {
+      "profiles": {
+        "xterm-256color": {
+          "CLI": "codex-tui/0.167.2 (Fedora 44.0.0; x86_64) xterm-256color (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Fedora 44.0.0; x86_64) xterm-256color (codex_exec; 0.167.2)"
+        },
+        "WindowsTerminal": null,
+        "vscode": null,
+        "herdr": {
+          "CLI": "codex-tui/0.167.2 (Fedora 44.0.0; x86_64) herdr/0.9.5 (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Fedora 44.0.0; x86_64) herdr/0.9.5 (codex_exec; 0.167.2)"
+        }
+      }
+    },
+    "linux-fedora-arm64": {
+      "profiles": {
+        "xterm-256color": {
+          "CLI": "codex-tui/0.167.2 (Fedora 44.0.0; aarch64) xterm-256color (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Fedora 44.0.0; aarch64) xterm-256color (codex_exec; 0.167.2)"
+        },
+        "WindowsTerminal": null,
+        "vscode": null,
+        "herdr": {
+          "CLI": "codex-tui/0.167.2 (Fedora 44.0.0; aarch64) herdr/0.9.5 (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Fedora 44.0.0; aarch64) herdr/0.9.5 (codex_exec; 0.167.2)"
+        }
+      }
+    },
+    "linux-alpine-x64": {
+      "profiles": {
+        "xterm-256color": {
+          "CLI": "codex-tui/0.167.2 (Alpine Linux 3.24.4; x86_64) xterm-256color (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Alpine Linux 3.24.4; x86_64) xterm-256color (codex_exec; 0.167.2)"
+        },
+        "WindowsTerminal": null,
+        "vscode": null,
+        "herdr": {
+          "CLI": "codex-tui/0.167.2 (Alpine Linux 3.24.4; x86_64) herdr/0.9.5 (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Alpine Linux 3.24.4; x86_64) herdr/0.9.5 (codex_exec; 0.167.2)"
+        }
+      }
+    },
+    "linux-alpine-arm64": {
+      "profiles": {
+        "xterm-256color": {
+          "CLI": "codex-tui/0.167.2 (Alpine Linux 3.24.4; aarch64) xterm-256color (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Alpine Linux 3.24.4; aarch64) xterm-256color (codex_exec; 0.167.2)"
+        },
+        "WindowsTerminal": null,
+        "vscode": null,
+        "herdr": {
+          "CLI": "codex-tui/0.167.2 (Alpine Linux 3.24.4; aarch64) herdr/0.9.5 (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Alpine Linux 3.24.4; aarch64) herdr/0.9.5 (codex_exec; 0.167.2)"
+        }
+      }
+    },
+    "macos-x64": {
+      "profiles": {
+        "xterm-256color": {
+          "CLI": "codex-tui/0.167.2 (Mac OS 15.7.9; x86_64) xterm-256color (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Mac OS 15.7.9; x86_64) xterm-256color (codex_exec; 0.167.2)"
+        },
+        "WindowsTerminal": null,
+        "vscode": {
+          "CLI": "codex-tui/0.167.2 (Mac OS 15.7.9; x86_64) vscode/1.146.0 (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Mac OS 15.7.9; x86_64) vscode/1.146.0 (codex_exec; 0.167.2)"
+        },
+        "herdr": {
+          "CLI": "codex-tui/0.167.2 (Mac OS 15.7.9; x86_64) herdr/0.9.5 (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Mac OS 15.7.9; x86_64) herdr/0.9.5 (codex_exec; 0.167.2)"
+        }
+      }
+    },
+    "macos-arm64": {
+      "profiles": {
+        "xterm-256color": {
+          "CLI": "codex-tui/0.167.2 (Mac OS 15.8.2; arm64) xterm-256color (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Mac OS 15.8.2; arm64) xterm-256color (codex_exec; 0.167.2)"
+        },
+        "WindowsTerminal": null,
+        "vscode": {
+          "CLI": "codex-tui/0.167.2 (Mac OS 15.8.2; arm64) vscode/1.146.0 (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Mac OS 15.8.2; arm64) vscode/1.146.0 (codex_exec; 0.167.2)"
+        },
+        "herdr": {
+          "CLI": "codex-tui/0.167.2 (Mac OS 15.8.2; arm64) herdr/0.9.5 (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Mac OS 15.8.2; arm64) herdr/0.9.5 (codex_exec; 0.167.2)"
+        }
+      }
+    },
+    "windows-x64": {
+      "profiles": {
+        "xterm-256color": {
+          "CLI": "codex-tui/0.167.2 (Windows 10.0.26100; x86_64) xterm-256color (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Windows 10.0.26100; x86_64) xterm-256color (codex_exec; 0.167.2)"
+        },
+        "WindowsTerminal": {
+          "CLI": "codex-tui/0.167.2 (Windows 10.0.26100; x86_64) WindowsTerminal (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Windows 10.0.26100; x86_64) WindowsTerminal (codex_exec; 0.167.2)"
+        },
+        "vscode": null,
+        "herdr": {
+          "CLI": "codex-tui/0.167.2 (Windows 10.0.26100; x86_64) herdr/0.9.5 (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Windows 10.0.26100; x86_64) herdr/0.9.5 (codex_exec; 0.167.2)"
+        }
+      }
+    },
+    "windows-arm64": {
+      "profiles": {
+        "xterm-256color": {
+          "CLI": "codex-tui/0.167.2 (Windows 10.0.26200; aarch64) xterm-256color (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Windows 10.0.26200; aarch64) xterm-256color (codex_exec; 0.167.2)"
+        },
+        "WindowsTerminal": {
+          "CLI": "codex-tui/0.167.2 (Windows 10.0.26200; aarch64) WindowsTerminal (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Windows 10.0.26200; aarch64) WindowsTerminal (codex_exec; 0.167.2)"
+        },
+        "vscode": {
+          "CLI": "codex-tui/0.167.2 (Windows 10.0.26200; aarch64) vscode/1.146.0 (codex-tui; 0.167.2)",
+          "Exec": "codex_exec/0.167.2 (Windows 10.0.26200; aarch64) vscode/1.146.0 (codex_exec; 0.167.2)"
+        },
+        "herdr": null
+      }
+    }
+  }
+}

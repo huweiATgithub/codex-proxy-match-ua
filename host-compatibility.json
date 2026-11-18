@@ -1,0 +1,19 @@
+{
+  "hosts": [
+    {
+      "version": "3.33.0",
+      "revision": "8c8618aa0f841638262262e3338c115bc075f125",
+      "sha256": "3cce4141def449997bf8691edde7aab8d2c966241965d58818c03b610e08acc0"
+    },
+    {
+      "version": "3.44.0",
+      "revision": "c622f085748f812936a7371fcc85d1621fa72ca8",
+      "sha256": "c2cab5f4ef0ebb7d0de375ea07d2f1bc2a0353cc7523a3cf3552ebbf16480db5"
+    },
+    {
+      "version": "3.52.0",
+      "revision": "ba8745a7140396bf93cc7d314fcdaf0f21dbf6e5",
+      "sha256": "3d5a6e7abdaafffdd4ca50861e5ad140692c6b824b3593c93714a0032fb932a3"
+    }
+  ]
+}

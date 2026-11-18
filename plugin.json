@@ -1,0 +1,22 @@
+{
+  "manifestVersion": 2,
+  "publisher": "huwei",
+  "name": "match-ua",
+  "displayName": "Codex UA platform check",
+  "description": "Reject OpenAI model requests whose client and upstream User-Agents report incompatible operating systems.",
+  "version": "0.1.0",
+  "license": "MIT",
+  "runtime": "trustedProcess",
+  "main": "codex-proxy-match-ua",
+  "engines": { "codex-proxy-rs": ">=3.33.0, <4.0.0" },
+  "resources": { "LICENSE": "text/plain; charset=utf-8" },
+  "contributes": {
+    "middleware": {
+      "version": 6,
+      "stages": ["request", "outbound", "websocket"],
+      "inputFormats": ["openai"],
+      "outputFormats": ["openai"]
+    },
+    "maintenance": { "version": 1 }
+  }
+}
