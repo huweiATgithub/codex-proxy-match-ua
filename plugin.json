@@ -4,14 +4,16 @@
   "name": "match-ua",
   "displayName": "Codex UA platform check",
   "description": "Reject OpenAI model requests whose client and upstream User-Agents report incompatible operating systems.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "license": "MIT",
   "runtime": "trustedProcess",
   "main": "codex-proxy-match-ua",
   "engines": { "codex-proxy-rs": ">=3.33.0, <4.0.0" },
   "resources": {
     "LICENSE": "text/plain; charset=utf-8",
-    "ui/rejections.html": "text/html; charset=utf-8"
+    "ui/rejections.html": "text/html; charset=utf-8",
+    "ui/assets/rejections.js": "text/javascript; charset=utf-8",
+    "ui/assets/rejections.css": "text/css; charset=utf-8"
   },
   "contributes": {
     "middleware": {

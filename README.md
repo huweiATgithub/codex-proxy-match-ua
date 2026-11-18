@@ -8,7 +8,9 @@ Upload the Linux x86-64 package in the proxy’s plugin administration page. Kee
 
 A rejected request returns `403 policy_denied` with a message such as `UA incompatible. The client User-Agent reports Linux. The effective User-Agent for this key requires Windows.` An established Responses WebSocket receives the corresponding error event with status 403 and its original gateway request ID. On a reused upstream WebSocket, the host exposes the candidate UA for that turn.
 
-In the host admin console, open **Plugins → UA rejections**. Expand a row to compare both User-Agents, or search for the gateway request ID returned to the client. When upgrading from v0.1.0, switch the existing instance to the new version to view its previously recorded failures.
+In the host admin console, open **Plugins → UA rejections**. The table shows the client key name, upstream account name, and both OS families. Expand the timestamp to see both User-Agents and the detailed denial message, or search for the gateway request ID returned to the client. When upgrading, switch the existing instance to the new version to keep its history.
+
+Host maintenance refreshes key and OpenAI account names at startup and on the first maintenance pass at least one minute after the previous refresh. Model requests and admin page views make zero host name lookups. Existing rows show the most recently observed names, including after a rename or deletion. A name the plugin has never observed appears as **Name unavailable**.
 
 Each instance stores diagnostics in `<runtime_data_dir>/huwei.match-ua/<instance_id>/rejections.sqlite3`. From a SQLite shell opened on this file, inspect the latest rejections with
 
@@ -22,11 +24,13 @@ LIMIT 20;
 
 Rows also include the upstream account ID, model, attempt number, upstream transport, and count of UA header values on each side. The first UA header from each side is sampled up to 1,024 bytes. A bounded queue accepts records without waiting for SQLite. A dedicated writer commits up to 32 records per transaction. A full queue, a storage failure, or a process exit can lose diagnostic rows. Host maintenance deletes records older than seven days in indexed batches. SQLite reuses the freed pages.
 
-Build and package on Linux x86-64 with Rust 1.99.1 and the v3.52.0 host’s `cpr-plugin` CLI on PATH.
+Build and package on Linux x86-64 with Rust 1.99.1, Node 24, and the v3.52.0 host’s `cpr-plugin` CLI on PATH.
 
 ```sh
 cargo test --locked
 cargo build --release --locked
+npm ci --ignore-scripts
+npm run build
 cpr-plugin package --manifest plugin.json --binary target/release/codex-proxy-match-ua \
   --target x86_64-unknown-linux-gnu --output-dir dist
 ```

@@ -2,4 +2,5 @@
 /dist/
 /_host/
 /node_modules/
+/ui/assets/
 __pycache__/

@@ -25,10 +25,13 @@ pub fn registration() -> ManagementRegistration {
             entry: PAGE.into(),
             icon: None,
         }],
-        resources: vec![ManagementResource {
-            path: PAGE.into(),
-            public: false,
-        }],
+        resources: [PAGE, "ui/assets/rejections.js", "ui/assets/rejections.css"]
+            .into_iter()
+            .map(|path| ManagementResource {
+                path: path.into(),
+                public: false,
+            })
+            .collect(),
         routes: vec![ManagementRoute {
             method: "GET".into(),
             path: ROUTE.into(),

@@ -1,3 +1,5 @@
+pub mod names;
+
 use std::{
     ffi::OsStr,
     fs, io,
@@ -189,7 +191,11 @@ fn open_database(path: &Path) -> rusqlite::Result<Connection> {
             client_ua_count INTEGER NOT NULL, effective_ua_count INTEGER NOT NULL
         );
         CREATE INDEX IF NOT EXISTS rejection_time ON rejected_requests(rejected_at);
-        CREATE INDEX IF NOT EXISTS rejection_request_id ON rejected_requests(request_id, rejected_at);",
+        CREATE INDEX IF NOT EXISTS rejection_request_id ON rejected_requests(request_id, rejected_at);
+        CREATE TABLE IF NOT EXISTS rejection_names (
+            kind TEXT NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL, last_seen INTEGER NOT NULL,
+            PRIMARY KEY (kind, id)
+        ) WITHOUT ROWID;",
     )?;
     Ok(db)
 }
@@ -267,7 +273,7 @@ mod tests {
     use super::*;
     use crate::platform::UaIssue;
 
-    fn sample(at: i64) -> Record {
+    pub(super) fn sample(at: i64) -> Record {
         Record {
             at,
             request_id: "request".into(),

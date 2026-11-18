@@ -29,6 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &session.handshake().instance_id,
     ));
     let maintenance = Arc::clone(&diagnostics);
+    let names = Arc::new(diagnostics::names::NameRefresh::default());
     let viewer = Arc::clone(&diagnostics);
     let pending = Arc::new(PendingRequests::default());
     let ws = Arc::new(websocket::ErrorMessages::default());
@@ -60,9 +61,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })?
         .on(methods::RECONCILE, move |call| {
             let maintenance = Arc::clone(&maintenance);
+            let names = Arc::clone(&names);
             ws_maintenance.expire();
             async move {
                 maintenance.prune(call.host.remaining_budget()).await?;
+                if let Some(path) = maintenance.database_path() {
+                    names.refresh(&call.host, path).await?;
+                }
                 Ok(TypedReply::new(Empty {}))
             }
         })?

@@ -8,6 +8,7 @@ from pathlib import Path
 import sqlite3
 import subprocess
 import time
+from urllib.parse import urlencode
 
 from host_fixture import run_host, wait
 
@@ -86,10 +87,38 @@ def verify_storage(host, instance, request_id, key, second_id):
     return latency
 
 
-def verify_page(host, instance, request_id, key):
+def verify_name_refresh(host, instance, request_id, account):
+    view = next(view for view in host.admin("/api/admin/plugins/extensions") if view["target"]["instanceId"] == instance)
+    target = view["target"]
+    route = f"/api/admin/plugins/extensions/{instance}/{target['artifactSha256']}/{target['revision']}/api/api/rejections"
+
+    def entry(request_id):
+        items = host.admin(route + "?" + urlencode({"requestId": request_id}))["items"]
+        assert len(items) == 1, "waiting for the diagnostic writer"
+        return items[0]
+
+    def initial():
+        row = entry(request_id)
+        assert (row["clientKeyName"], row["accountName"]) == ("windows", account["name"]), "waiting for the initial name directory"
+    wait(initial, timeout=100)
+    archived = create_key(host, "Retired Windows key", preset("windows"))
+    archived_id = send(host, archived, UBUNTU, 403, "Windows")
+
+    def resolved():
+        row = entry(archived_id)
+        assert row["clientKeyName"] == "Retired Windows key", "waiting for maintenance to resolve the new key"
+    wait(resolved, timeout=100)
+    host.admin("/api/admin/client-keys/delete", {"id": archived["id"]})
+    assert entry(archived_id)["clientKeyName"] == "Retired Windows key"
+    return archived_id
+
+
+def verify_page(host, instance, request_id, key, account, archived_id):
     subprocess.run(["node", str(ROOT / "tests/management-page.mjs")], check=True, timeout=60, env={
         **os.environ, "CPR_TEST_URL": host.url, "CPR_TEST_COOKIE": host.cookie, "CPR_TEST_INSTANCE": instance,
-        "CPR_TEST_REQUEST_ID": request_id, "CPR_TEST_KEY_ID": key["id"], "CPR_TEST_CLIENT_UA": UBUNTU,
+        "CPR_TEST_REQUEST_ID": request_id, "CPR_TEST_KEY_ID": key["id"], "CPR_TEST_KEY_NAME": "windows",
+        "CPR_TEST_ACCOUNT_ID": account["id"], "CPR_TEST_ACCOUNT_NAME": account["name"],
+        "CPR_TEST_ARCHIVED_ID": archived_id, "CPR_TEST_CLIENT_UA": UBUNTU,
     })
 
 
@@ -97,6 +126,12 @@ def verify(release, archive):
     payload = archive.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
     with run_host(release) as host:
+        host.admin("/api/admin/accounts/import", {"provider": "openai", "data": {
+            "authentication_kind": "api_key", "name": "loopback", "base_url": host.upstream,
+            "api_key": "sk-loopback-fixture", "transport": "http"}})
+        set_global(host, "linux")
+        inherited = create_key(host, "inherited")
+        windows = create_key(host, "windows", preset("windows"))
         upload = host.admin("/api/admin/plugins/artifacts/upload?sha256=" + digest, payload)
         instance = upload["defaultInstanceId"]
 
@@ -104,12 +139,6 @@ def verify(release, archive):
             assert any(row["id"] == instance and row["enabled"] for row in host.admin("/api/admin/plugins/instances"))
         wait(enabled)
         print("Installed package", digest, flush=True)
-        host.admin("/api/admin/accounts/import", {"provider": "openai", "data": {
-            "authentication_kind": "api_key", "name": "loopback", "base_url": host.upstream,
-            "api_key": "sk-loopback-fixture", "transport": "http"}})
-        set_global(host, "linux")
-        inherited = create_key(host, "inherited")
-        windows = create_key(host, "windows", preset("windows"))
         send(host, inherited, UBUNTU, 200, "Linux")
         send(host, inherited, WINDOWS, 403, "Linux")
         rejected = send(host, windows, UBUNTU, 403, "Windows")
@@ -120,6 +149,7 @@ def verify(release, archive):
         print("Verified outbound UA, global changes, and independent keys", flush=True)
 
         account = host.admin("/api/admin/accounts?page=1&pageSize=20")["items"][0]
+        assert account["name"] and account["name"] != account["id"]
         host.admin("/api/admin/accounts/update", {"accountId": account["id"], "enabled": True,
                    "concurrencyLimit": 16, "weight": 1, "groupIds": [],
                    "connection": {"baseUrl": host.upstream, "transport": "prefer_websocket"}})
@@ -129,13 +159,15 @@ def verify(release, archive):
         assert len(host.records) == before, "error-delivery checks reached upstream"
         for _ in range(25):
             send(host, windows, UBUNTU, 403, "Windows")
-        verify_page(host, instance, rejected, windows)
+        archived_id = verify_name_refresh(host, instance, rejected, account)
+        verify_page(host, instance, rejected, windows, account, archived_id)
         latency = verify_storage(host, instance, rejected, windows, second_id)
         print("Verified SQLite records, rejection under write lock, and seven-day retention", flush=True)
     return {"packageSha256": digest, "lockedRejectionMs": latency, "checks": [
         "package-install", "outbound-platform", "global-inheritance", "key-override", "zero-upstream-on-denial",
         "http-error", "streaming-http-error", "websocket-error", "sqlite-record", "write-lock", "retention",
-        "private-management-route", "management-page-browser",
+        "private-management-route", "management-page-browser", "rejection-table",
+        "cached-key-and-account-names", "background-name-refresh", "deleted-key-name",
     ]}
 
 

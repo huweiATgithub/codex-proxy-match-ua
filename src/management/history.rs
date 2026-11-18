@@ -46,12 +46,13 @@ impl Query {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Entry {
-    #[serde(skip)]
-    id: i64,
+    row_key: String,
     rejected_at: i64,
     request_id: String,
     client_key_id: String,
+    client_key_name: Option<String>,
     account_id: String,
+    account_name: Option<String>,
     model: Option<String>,
     attempt_index: u32,
     transport: String,
@@ -67,12 +68,16 @@ struct Entry {
 
 impl Entry {
     fn read(row: &Row<'_>) -> rusqlite::Result<Self> {
+        let rejected_at: i64 = row.get("rejected_at")?;
+        let id: i64 = row.get("id")?;
         Ok(Self {
-            id: row.get("id")?,
-            rejected_at: row.get("rejected_at")?,
+            row_key: format!("{rejected_at}.{id}"),
+            rejected_at,
             request_id: row.get("request_id")?,
             client_key_id: row.get("client_key_id")?,
+            client_key_name: row.get("client_key_name")?,
             account_id: row.get("account_id")?,
+            account_name: row.get("account_name")?,
             model: row.get("model")?,
             attempt_index: row.get("attempt_index")?,
             transport: row.get("transport")?,
@@ -114,9 +119,20 @@ impl Page {
         } else {
             ""
         };
+        // Upgraded instances can serve their v0.1.1 history before the first maintenance pass.
+        let directory = if db.table_exists(None, "rejection_names")? {
+            "SELECT kind, id, name FROM rejection_names"
+        } else {
+            "SELECT NULL, NULL, NULL WHERE FALSE"
+        };
         let sql = format!(
-            "SELECT * FROM rejected_requests WHERE (rejected_at, id) < (?1, ?2) {filter}
-             ORDER BY rejected_at DESC, id DESC LIMIT {}",
+            "WITH names(kind, id, name) AS NOT MATERIALIZED ({directory})
+             SELECT r.*, NULLIF(k.name, '') AS client_key_name, NULLIF(a.name, '') AS account_name
+             FROM rejected_requests r
+             LEFT JOIN names k ON k.kind = 'key' AND k.id = r.client_key_id
+             LEFT JOIN names a ON a.kind = 'account' AND a.id = r.account_id
+             WHERE (r.rejected_at, r.id) < (?1, ?2) {filter}
+             ORDER BY r.rejected_at DESC, r.id DESC LIMIT {}",
             PAGE_SIZE + 1
         );
         let first = Cursor {
@@ -133,7 +149,7 @@ impl Page {
         while let Some(row) = rows.next()? {
             if page.items.len() == PAGE_SIZE {
                 let last = page.items.last().expect("a full page has a last entry");
-                page.next_cursor = Some(format!("{}.{}", last.rejected_at, last.id));
+                page.next_cursor = Some(last.row_key.clone());
                 break;
             }
             page.items.push(Entry::read(row)?);
@@ -170,6 +186,33 @@ mod tests {
                 .table_exists(None, "rejected_requests")
                 .unwrap()
         );
+    }
+
+    #[test]
+    fn pre_upgrade_rows_are_readable_before_names_exist_and_have_distinct_lossless_keys() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rejections.sqlite3");
+        let db = Connection::open(&path).unwrap();
+        db.execute_batch(
+            "CREATE TABLE rejected_requests AS
+             SELECT 9007199254740992 + n AS id, 100 AS rejected_at, 'request' AS request_id,
+                'key' AS client_key_id, 'account' AS account_id, NULL AS model, n AS attempt_index,
+                'http' AS transport, 'platform_mismatch' AS reason, 'UA incompatible.' AS message,
+                'Linux' AS client_platform, 'Windows' AS effective_platform, NULL AS client_ua,
+                NULL AS effective_ua, 1 AS client_ua_count, 1 AS effective_ua_count
+             FROM (SELECT 1 AS n UNION ALL SELECT 2)",
+        )
+        .unwrap();
+        let page = Page::read(&path, &Query::parse("requestId=request").unwrap()).unwrap();
+        assert_eq!(page.items.len(), 2);
+        assert_eq!(page.items[0].row_key, "100.9007199254740994");
+        assert_eq!(page.items[1].row_key, "100.9007199254740993");
+        assert!(
+            page.items
+                .iter()
+                .all(|entry| entry.client_key_name.is_none() && entry.account_name.is_none())
+        );
+        assert!(!db.table_exists(None, "rejection_names").unwrap());
     }
 
     #[test]

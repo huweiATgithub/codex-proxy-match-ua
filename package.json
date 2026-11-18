@@ -1,7 +1,16 @@
 {
-  "name": "codex-proxy-match-ua-browser-tests",
+  "name": "codex-proxy-match-ua-ui",
   "private": true,
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@codex-proxy/ui": "https://github.com/zyycn/codex-proxy-ui/releases/download/v0.3.2/codex-proxy-ui-0.3.2.tgz",
+    "vue": "3.5.43"
+  },
   "devDependencies": {
-    "playwright": "1.64.0"
+    "@vitejs/plugin-vue": "6.0.9",
+    "playwright": "1.64.0",
+    "vite": "8.3.4"
   }
 }

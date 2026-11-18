@@ -71,6 +71,11 @@ jobs:
         run: python3 ci/release.py check-elf target/release/codex-proxy-match-ua
       - name: Build packaging CLI
         run: cargo build --manifest-path _host/backend/Cargo.toml --locked -p codex-proxy-plugin-cli
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - run: npm run build
       - name: Package plugin and check its checksum
         run: |
           _host/backend/target/debug/cpr-plugin package --manifest plugin.json \

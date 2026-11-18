@@ -13,7 +13,9 @@ pathlib.Path(sys.argv[2]).write_text(
     "Linux x86-64 requires glibc 2.34 or newer.\n\n"
     f"Host range is `{os.environ['HOST_RANGE']}`. This archive passed integration tests on {versions}. "
     f"The SDK and packaging CLI use `{os.environ['SDK_REVISION']}`.\n\n"
-    "Install the plugin archive from the proxy administration page. Open **Plugins → UA rejections** to view failures. "
+    "Open **Plugins → UA rejections** for a table of failures with client key and upstream account names. "
+    "Expand a timestamp to compare both User-Agents and read the denial message. "
+    "Names refresh in the background using the host maintenance task. "
     "When upgrading, switch the existing instance to this version to keep its diagnostic history. "
     "The verification report includes each tested host revision and package checksum. "
     "Run `sha256sum --check SHA256SUMS` in the download directory to verify the assets.\n")
