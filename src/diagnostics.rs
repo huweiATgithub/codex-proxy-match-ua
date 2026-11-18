@@ -19,7 +19,7 @@ const QUEUE_CAPACITY: usize = 256;
 const WRITE_BATCH: usize = 32;
 const RETENTION_SECONDS: i64 = 7 * 24 * 60 * 60;
 const DELETE_BATCH: usize = 1024;
-const BUSY_TIMEOUT: Duration = Duration::from_millis(200);
+pub(crate) const BUSY_TIMEOUT: Duration = Duration::from_millis(200);
 const MAX_UA_BYTES: usize = 1024;
 
 pub struct Record {
@@ -108,6 +108,13 @@ impl Diagnostics {
         }
     }
 
+    pub fn database_path(&self) -> Option<&Path> {
+        match self {
+            Self::Active { path, .. } => Some(path),
+            Self::Unavailable => None,
+        }
+    }
+
     pub async fn prune(&self, budget: Option<Duration>) -> Result<(), PluginFault> {
         let Self::Active { path, .. } = self else {
             return Err(PluginFault::new(
@@ -181,7 +188,8 @@ fn open_database(path: &Path) -> rusqlite::Result<Connection> {
             client_platform TEXT, effective_platform TEXT, client_ua TEXT, effective_ua TEXT,
             client_ua_count INTEGER NOT NULL, effective_ua_count INTEGER NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS rejection_time ON rejected_requests(rejected_at);",
+        CREATE INDEX IF NOT EXISTS rejection_time ON rejected_requests(rejected_at);
+        CREATE INDEX IF NOT EXISTS rejection_request_id ON rejected_requests(request_id, rejected_at);",
     )?;
     Ok(db)
 }

@@ -2,13 +2,15 @@
 
 This plugin rejects OpenAI model sends when the original client User-Agent and the User-Agent prepared for the authenticated key declare different OS families. It recognizes Linux, Windows, and macOS. Ubuntu in Windows Terminal is Linux, including when the key uses a Fedora profile or a different architecture. A missing, duplicated, malformed, or unrecognized UA also blocks the send.
 
-The minimum host is **codex-proxy-rs v3.33.0**, the first release with plugin RPC 7. The plugin uses middleware v6 for the inbound request, prepared outbound headers, and WebSocket errors, plus maintenance v1 for retention. The SDK rejects a connection with a different RPC version. The immediately preceding release, v3.32.0, speaks RPC 6. [v3.33.0 host contract](https://github.com/zyycn/codex-proxy-rs/blob/v3.33.0/backend/crates/gateway-plugin/runtime/plugin-host-compatibility.json) · [v3.32.0 host contract](https://github.com/zyycn/codex-proxy-rs/blob/v3.32.0/backend/crates/gateway-plugin/runtime/plugin-host-compatibility.json)
+The minimum host is **codex-proxy-rs v3.33.0**, the first release with plugin RPC 7. The plugin uses middleware v6 for the inbound request, prepared outbound headers, and WebSocket errors, management v2 for the admin page, and maintenance v1 for retention. The SDK rejects a connection with a different RPC version. The immediately preceding release, v3.32.0, speaks RPC 6. [v3.33.0 host contract](https://github.com/zyycn/codex-proxy-rs/blob/v3.33.0/backend/crates/gateway-plugin/runtime/plugin-host-compatibility.json) · [v3.32.0 host contract](https://github.com/zyycn/codex-proxy-rs/blob/v3.32.0/backend/crates/gateway-plugin/runtime/plugin-host-compatibility.json)
 
 Upload the Linux x86-64 package in the proxy’s plugin administration page. Keep the default `request`, `outbound`, and `websocket` bindings enabled. If another outbound plugin edits User-Agent, put this plugin outermost so it checks the headers returned by the other plugin. The outbound hook compares the original UA with the prepared UA after the host resolves the key’s override or its inherited global profile. The other two bindings deliver the reason on HTTP responses and WebSocket errors.
 
 A rejected request returns `403 policy_denied` with a message such as `UA incompatible. The client User-Agent reports Linux. The effective User-Agent for this key requires Windows.` An established Responses WebSocket receives the corresponding error event with status 403 and its original gateway request ID. On a reused upstream WebSocket, the host exposes the candidate UA for that turn.
 
-Each instance stores diagnostics in `<runtime_data_dir>/huwei.match-ua/<instance_id>/rejections.sqlite3`. The gateway request ID in the client response identifies the row. From a SQLite shell opened on this file, inspect the latest rejections with
+In the host admin console, open **Plugins → UA rejections**. Expand a row to compare both User-Agents, or search for the gateway request ID returned to the client. When upgrading from v0.1.0, switch the existing instance to the new version to view its previously recorded failures.
+
+Each instance stores diagnostics in `<runtime_data_dir>/huwei.match-ua/<instance_id>/rejections.sqlite3`. From a SQLite shell opened on this file, inspect the latest rejections with
 
 ```sql
 SELECT datetime(rejected_at, 'unixepoch') AS utc, request_id, client_key_id,
@@ -31,6 +33,6 @@ cpr-plugin package --manifest plugin.json --binary target/release/codex-proxy-ma
 
 The offline parser tests use the published CLI and Exec samples. [Codex UA v0.167.2](https://github.com/huweiATgithub/codex-ua/releases/tag/v0.167.2)
 
-Pull requests and pushes to `main` build one package and exercise it on released hosts v3.33.0, v3.44.0, and v3.52.0. CI checks key overrides, global inheritance, client-visible errors, and SQLite retention. Pushing a matching `v<version>` tag repeats those checks and publishes the tested archive, checksum files, host verification report, and license. [CI workflow](.github/workflows/ci.yml) · [Release workflow](.github/workflows/release.yml)
+Pull requests and pushes to `main` build one package and exercise it on released hosts v3.33.0, v3.44.0, and v3.52.0. CI checks key overrides, global inheritance, client-visible errors, SQLite retention, and the authenticated admin page in Chromium. Pushing a matching `v<version>` tag repeats those checks and publishes the tested archive, checksum files, host verification report, and license. [CI workflow](.github/workflows/ci.yml) · [Release workflow](.github/workflows/release.yml)
 
 For the client error regression test, set `CPR_TEST_URL` and `CPR_TEST_WINDOWS_KEY` for a disposable host with a Windows key and a WebSocket-capable OpenAI account. Run `node tests/host-errors.mjs` using Node 24.

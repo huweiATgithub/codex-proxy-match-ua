@@ -1,4 +1,5 @@
 mod diagnostics;
+mod management;
 mod platform;
 mod response;
 mod websocket;
@@ -28,6 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &session.handshake().instance_id,
     ));
     let maintenance = Arc::clone(&diagnostics);
+    let viewer = Arc::clone(&diagnostics);
     let pending = Arc::new(PendingRequests::default());
     let ws = Arc::new(websocket::ErrorMessages::default());
     let ws_maintenance = Arc::clone(&ws);
@@ -51,6 +53,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     other => other.forward().await,
                 }
             }
+        })?
+        .management(management::registration(), move |call| {
+            let viewer = Arc::clone(&viewer);
+            async move { management::handle(&viewer, call.request).await }
         })?
         .on(methods::RECONCILE, move |call| {
             let maintenance = Arc::clone(&maintenance);

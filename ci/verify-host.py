@@ -86,6 +86,13 @@ def verify_storage(host, instance, request_id, key, second_id):
     return latency
 
 
+def verify_page(host, instance, request_id, key):
+    subprocess.run(["node", str(ROOT / "tests/management-page.mjs")], check=True, timeout=60, env={
+        **os.environ, "CPR_TEST_URL": host.url, "CPR_TEST_COOKIE": host.cookie, "CPR_TEST_INSTANCE": instance,
+        "CPR_TEST_REQUEST_ID": request_id, "CPR_TEST_KEY_ID": key["id"], "CPR_TEST_CLIENT_UA": UBUNTU,
+    })
+
+
 def verify(release, archive):
     payload = archive.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
@@ -120,11 +127,15 @@ def verify(release, archive):
         subprocess.run(["node", str(ROOT / "tests/host-errors.mjs")], check=True, timeout=35,
                        env={**os.environ, "CPR_TEST_URL": host.url, "CPR_TEST_WINDOWS_KEY": windows["plaintextKey"]})
         assert len(host.records) == before, "error-delivery checks reached upstream"
+        for _ in range(25):
+            send(host, windows, UBUNTU, 403, "Windows")
+        verify_page(host, instance, rejected, windows)
         latency = verify_storage(host, instance, rejected, windows, second_id)
         print("Verified SQLite records, rejection under write lock, and seven-day retention", flush=True)
     return {"packageSha256": digest, "lockedRejectionMs": latency, "checks": [
         "package-install", "outbound-platform", "global-inheritance", "key-override", "zero-upstream-on-denial",
         "http-error", "streaming-http-error", "websocket-error", "sqlite-record", "write-lock", "retention",
+        "private-management-route", "management-page-browser",
     ]}
 
 

@@ -1,4 +1,5 @@
 /target/
 /dist/
 /_host/
+/node_modules/
 __pycache__/
