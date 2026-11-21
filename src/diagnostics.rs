@@ -13,7 +13,7 @@ use gateway_plugin_sdk::{
     ErrorCode, PluginFault,
     call::middleware::outbound::{Metadata, Target},
 };
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, TransactionBehavior, params};
 
 use crate::platform::{Platform, Rejection, UserAgent};
 
@@ -34,6 +34,8 @@ pub struct Record {
     transport: &'static str,
     client_ua: Option<String>,
     effective_ua: Option<String>,
+    client_platform: Option<Platform>,
+    effective_platform: Option<Platform>,
     client_count: usize,
     effective_count: usize,
     rejection: Rejection,
@@ -65,6 +67,8 @@ impl Record {
             },
             client_ua: sample(client),
             effective_ua: sample(effective),
+            client_platform: client.platform.ok(),
+            effective_platform: effective.platform.ok(),
             client_count: client.count,
             effective_count: effective.count,
             rejection,
@@ -105,7 +109,7 @@ impl Diagnostics {
 
     pub fn submit(&self, record: Record) {
         if let Self::Active { sender, .. } = self {
-            // Full queues drop this sample. Admission and its error message already have the decision.
+            // Admission is independent of the diagnostics writer.
             let _ = sender.try_send(record);
         }
     }
@@ -178,7 +182,7 @@ fn open_database(path: &Path) -> rusqlite::Result<Connection> {
     directory
         .create(path.parent().expect("plugin database has a parent"))
         .map_err(|_| rusqlite::Error::InvalidPath(path.to_owned()))?;
-    let db = Connection::open(path)?;
+    let mut db = Connection::open(path)?;
     db.busy_timeout(BUSY_TIMEOUT)?;
     db.execute_batch(
         "PRAGMA journal_mode=WAL;
@@ -188,7 +192,8 @@ fn open_database(path: &Path) -> rusqlite::Result<Connection> {
             client_key_id TEXT NOT NULL, account_id TEXT NOT NULL, attempt_index INTEGER NOT NULL,
             model TEXT, transport TEXT NOT NULL, reason TEXT NOT NULL, message TEXT NOT NULL,
             client_platform TEXT, effective_platform TEXT, client_ua TEXT, effective_ua TEXT,
-            client_ua_count INTEGER NOT NULL, effective_ua_count INTEGER NOT NULL
+            client_ua_count INTEGER NOT NULL, effective_ua_count INTEGER NOT NULL,
+            evidence_field TEXT, evidence_pattern TEXT, evidence_platform TEXT
         );
         CREATE INDEX IF NOT EXISTS rejection_time ON rejected_requests(rejected_at);
         CREATE INDEX IF NOT EXISTS rejection_request_id ON rejected_requests(request_id, rejected_at);
@@ -197,6 +202,18 @@ fn open_database(path: &Path) -> rusqlite::Result<Connection> {
             PRIMARY KEY (kind, id)
         ) WITHOUT ROWID;",
     )?;
+    if !db.column_exists(None, "rejected_requests", "evidence_field")? {
+        let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        // The writer and maintenance can both open a pre-upgrade database.
+        if !tx.column_exists(None, "rejected_requests", "evidence_field")? {
+            tx.execute_batch(
+                "ALTER TABLE rejected_requests ADD COLUMN evidence_field TEXT;
+                 ALTER TABLE rejected_requests ADD COLUMN evidence_pattern TEXT;
+                 ALTER TABLE rejected_requests ADD COLUMN evidence_platform TEXT;",
+            )?;
+        }
+        tx.commit()?;
+    }
     Ok(db)
 }
 
@@ -241,11 +258,12 @@ fn insert_batch(db: &mut Connection, batch: &[Record]) -> rusqlite::Result<()> {
             "INSERT INTO rejected_requests (
             rejected_at, request_id, client_key_id, account_id, attempt_index, model, transport,
             reason, message, client_platform, effective_platform, client_ua, effective_ua,
-            client_ua_count, effective_ua_count
-        ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+            client_ua_count, effective_ua_count, evidence_field, evidence_pattern, evidence_platform
+        ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
         )?;
         for record in batch {
             let reason = record.rejection;
+            let evidence = reason.evidence();
             insert.execute(params![
                 record.at,
                 record.request_id,
@@ -256,12 +274,15 @@ fn insert_batch(db: &mut Connection, batch: &[Record]) -> rusqlite::Result<()> {
                 record.transport,
                 reason.reason(),
                 reason.to_string(),
-                reason.client.ok().map(Platform::name),
-                reason.effective.ok().map(Platform::name),
+                record.client_platform.map(Platform::name),
+                record.effective_platform.map(Platform::name),
                 record.client_ua,
                 record.effective_ua,
                 record.client_count as i64,
-                record.effective_count as i64
+                record.effective_count as i64,
+                evidence.map(|e| e.field.to_string()),
+                evidence.map(|e| e.pattern),
+                evidence.map(|e| e.platform.name()),
             ])?;
         }
     }
@@ -286,7 +307,9 @@ mod tests {
             effective_ua: None,
             client_count: 0,
             effective_count: 1,
-            rejection: Rejection {
+            client_platform: None,
+            effective_platform: Some(Platform::Linux),
+            rejection: Rejection::UserAgents {
                 client: Err(UaIssue::Missing),
                 effective: Ok(Platform::Linux),
             },
@@ -309,6 +332,38 @@ mod tests {
                 .unwrap(),
             2
         );
+    }
+
+    #[test]
+    fn upgrading_preserves_old_rejections_and_writes_private_evidence() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("db");
+        let mut db = open_database(&path).unwrap();
+        insert_batch(&mut db, &[sample(1)]).unwrap();
+        db.execute_batch(
+            "ALTER TABLE rejected_requests DROP COLUMN evidence_field;
+                          ALTER TABLE rejected_requests DROP COLUMN evidence_pattern;
+                          ALTER TABLE rejected_requests DROP COLUMN evidence_platform;",
+        )
+        .unwrap();
+        drop(db);
+        let mut upgraded = open_database(&path).unwrap();
+        let mut record = sample(2);
+        record.rejection = Rejection::Metadata {
+            effective: Platform::Linux,
+            evidence: crate::metadata::Evidence {
+                field: crate::metadata::Field::Cwd,
+                pattern: "/Users/<name>",
+                platform: Platform::MacOS,
+            },
+        };
+        insert_batch(&mut upgraded, &[record]).unwrap();
+        let count: i64 = upgraded.query_row("SELECT count(*) FROM rejected_requests WHERE
+            (rejected_at = 1 AND evidence_field IS NULL AND reason = 'client_ua_unusable') OR
+            (rejected_at = 2 AND evidence_field = 'environment_context.cwd' AND evidence_pattern = '/Users/<name>'
+             AND evidence_platform = 'macOS' AND effective_platform = 'Linux' AND reason = 'path_os_mismatch')",
+            [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 2);
     }
 
     #[test]

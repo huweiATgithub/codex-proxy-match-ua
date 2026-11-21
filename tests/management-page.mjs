@@ -4,7 +4,7 @@ import { chromium } from "playwright";
 const { CPR_TEST_URL: base, CPR_TEST_COOKIE: cookie, CPR_TEST_INSTANCE: instance,
   CPR_TEST_REQUEST_ID: requestId, CPR_TEST_KEY_ID: keyId, CPR_TEST_KEY_NAME: keyName,
   CPR_TEST_ACCOUNT_ID: accountId, CPR_TEST_ACCOUNT_NAME: accountName, CPR_TEST_ARCHIVED_ID: archivedId,
-  CPR_TEST_CLIENT_UA: clientUa } = process.env;
+  CPR_TEST_CLIENT_UA: clientUa, CPR_TEST_PATH_ID: pathId } = process.env;
 const index = await fetch(new URL("/api/admin/plugins/extensions", base), { headers: { Cookie: cookie } });
 assert.equal(index.status, 200);
 const view = (await index.json()).data.find(item => item.target.instanceId === instance);
@@ -20,6 +20,14 @@ for (const url of [route, ...view.resources.map(resource => new URL(prefix + "/r
 }
 const invalid = await fetch(new URL(route + "?before=broken"), { headers: { Cookie: cookie } });
 assert.equal(invalid.status, 400);
+const evidenceUrl = new URL(route);
+evidenceUrl.searchParams.set("requestId", pathId);
+const diagnostic = await fetch(evidenceUrl, { headers: { Cookie: cookie } });
+assert.equal(diagnostic.status, 200);
+const result = await diagnostic.json();
+const [record] = (result.data ?? result).items;
+assert.deepEqual([record.reason, record.evidenceField, record.evidencePattern, record.evidencePlatform, record.effectivePlatform],
+  ["path_os_mismatch", "environment_context.cwd", "/Users/<name>", "macOS", "Linux"]);
 
 const browser = await chromium.launch();
 try {
@@ -73,6 +81,11 @@ try {
   await search.fill(archivedId);
   await search.press("Enter");
   await table.getByRole("row").filter({ hasText: archivedId }).getByRole("cell", { name: "Retired Windows key" }).waitFor();
+  await search.fill(pathId);
+  await search.press("Enter");
+  await table.getByRole("button", { name: "Details for " + pathId }).click();
+  await table.getByText("environment_context.cwd matches /Users/<name> (macOS). The effective User-Agent for this key requires Linux.", { exact: true }).waitFor();
+  assert.ok(!(await table.innerText()).includes("private-fixture"));
   await search.fill("missing-" + requestId);
   await search.press("Enter");
   await ui.getByText("No rejections match this request ID.", { exact: true }).waitFor();

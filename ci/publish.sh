@@ -9,13 +9,15 @@ import json, os, pathlib, sys
 verified = json.loads(pathlib.Path(sys.argv[1]).read_text())
 versions = ", ".join("v" + h["hostVersion"] for h in verified["hosts"])
 pathlib.Path(sys.argv[2]).write_text(
-    "This plugin rejects Codex requests when the client and effective key User-Agents report different operating systems.\n\n"
+    "Each request checks the client User-Agent, sandbox backend, Git workspace keys, current working directory and workspace roots "
+    "against the key’s effective operating system. Linux paths on WSL drive mounts and Windows paths to WSL shares "
+    "are recognized. A Linux User-Agent with a workspace under `/Users/<name>` is rejected, including on a custom Linux mount there.\n\n"
     "Linux x86-64 requires glibc 2.34 or newer.\n\n"
     f"Host range is `{os.environ['HOST_RANGE']}`. This archive passed integration tests on {versions}. "
     f"The SDK and packaging CLI use `{os.environ['SDK_REVISION']}`.\n\n"
-    "Open **Plugins → UA rejections** for a table of failures with client key and upstream account names. "
-    "Expand a timestamp to compare both User-Agents and read the denial message. "
-    "Names refresh in the background using the host maintenance task. "
+    "HTTP, streaming and WebSocket clients receive `403 policy_denied`, `Request blocked by policy.` and the gateway request ID. "
+    "Search that ID in **Plugins → UA rejections** for the triggering field, matched path pattern or sandbox backend, "
+    "inferred OS and expected key OS. Path evidence omits user and project names. "
     "When upgrading, switch the existing instance to this version to keep its diagnostic history. "
     "The verification report includes each tested host revision and package checksum. "
     "Run `sha256sum --check SHA256SUMS` in the download directory to verify the assets.\n")

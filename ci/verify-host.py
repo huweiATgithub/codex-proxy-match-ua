@@ -39,11 +39,19 @@ def create_key(host, name, profile=None):
     return host.admin("/api/admin/client-keys/create", config)
 
 
-def send(host, key, ua, expected, family):
+def send(host, key, ua, expected, family, *, turn_header=None, turn_body=None, input_items=None):
     before = len(host.records)
-    status, headers, body = host.request("/v1/responses", {
+    request = {
         "model": "gpt-5.4", "stream": False, "store": False, "input": [{"role": "user", "content": "test"}],
-    }, {"Authorization": "Bearer " + key["plaintextKey"], "User-Agent": ua})
+    }
+    request_headers = {"Authorization": "Bearer " + key["plaintextKey"], "User-Agent": ua}
+    if turn_header is not None:
+        request_headers["x-codex-turn-metadata"] = json.dumps(turn_header)
+    if turn_body is not None:
+        request["client_metadata"] = {"x-codex-turn-metadata": json.dumps(turn_body)}
+    if input_items is not None:
+        request["input"] = input_items
+    status, headers, body = host.request("/v1/responses", request, request_headers)
     assert status == expected, (status, body)
     if status == 200:
         assert body["id"].startswith("resp_test_")
@@ -51,12 +59,11 @@ def send(host, key, ua, expected, family):
     else:
         assert len(host.records) == before, "rejected request reached upstream"
         assert body["error"]["code"] == "policy_denied", body
-        assert body["error"]["message"].startswith("UA incompatible."), body
-        assert f"requires {family}." in body["error"]["message"], body
+        assert body["error"]["message"] == "Request blocked by policy.", body
     return headers["x-gateway-request-id"]
 
 
-def verify_storage(host, instance, request_id, key, second_id):
+def verify_storage(host, instance, request_id, key, second_id, sandbox_id, path_id):
     path = host.directory / "runtime" / "huwei.match-ua" / instance / "rejections.sqlite3"
 
     def recorded():
@@ -65,6 +72,14 @@ def verify_storage(host, instance, request_id, key, second_id):
             row = db.execute("SELECT client_key_id, client_ua, client_platform, effective_platform, reason "
                              "FROM rejected_requests WHERE request_id=?", (request_id,)).fetchone()
             assert row == (key["id"], UBUNTU, "Linux", "Windows", "platform_mismatch"), row
+            sandbox = db.execute("SELECT reason, evidence_field, evidence_pattern, evidence_platform FROM rejected_requests "
+                                 "WHERE request_id=?", (sandbox_id,)).fetchone()
+            assert sandbox == ("sandbox_platform_mismatch", "body.client_metadata.x-codex-turn-metadata.sandbox",
+                               "seccomp", "Linux"), sandbox
+            path_row = db.execute("SELECT reason, evidence_field, evidence_pattern, evidence_platform, effective_platform, message "
+                                  "FROM rejected_requests WHERE request_id=?", (path_id,)).fetchone()
+            assert path_row and path_row[:5] == ("path_os_mismatch", "environment_context.cwd", "/Users/<name>", "macOS", "Linux"), path_row
+            assert "private-fixture" not in path_row[5], path_row
             assert db.execute("SELECT count(*) FROM rejected_requests WHERE request_id=?", (second_id,)).fetchone()[0]
     wait(recorded)
     with sqlite3.connect(path) as db:
@@ -113,12 +128,12 @@ def verify_name_refresh(host, instance, request_id, account):
     return archived_id
 
 
-def verify_page(host, instance, request_id, key, account, archived_id):
+def verify_page(host, instance, request_id, key, account, archived_id, path_id):
     subprocess.run(["node", str(ROOT / "tests/management-page.mjs")], check=True, timeout=60, env={
         **os.environ, "CPR_TEST_URL": host.url, "CPR_TEST_COOKIE": host.cookie, "CPR_TEST_INSTANCE": instance,
         "CPR_TEST_REQUEST_ID": request_id, "CPR_TEST_KEY_ID": key["id"], "CPR_TEST_KEY_NAME": "windows",
         "CPR_TEST_ACCOUNT_ID": account["id"], "CPR_TEST_ACCOUNT_NAME": account["name"],
-        "CPR_TEST_ARCHIVED_ID": archived_id, "CPR_TEST_CLIENT_UA": UBUNTU,
+        "CPR_TEST_ARCHIVED_ID": archived_id, "CPR_TEST_CLIENT_UA": UBUNTU, "CPR_TEST_PATH_ID": path_id,
     })
 
 
@@ -140,6 +155,13 @@ def verify(release, archive):
         wait(enabled)
         print("Installed package", digest, flush=True)
         send(host, inherited, UBUNTU, 200, "Linux")
+        send(host, inherited, UBUNTU, 200, "Linux", turn_body={"sandbox": "seccomp", "workspaces": {"/mnt/d/Users/name": {}}})
+        context = {"role": "user", "content": [{"type": "input_text",
+                   "text": "<environment_context><cwd>/Users/private-fixture/repo</cwd></environment_context>"}]}
+        prompt = {"role": "user", "content": "hello"}
+        path_id = send(host, inherited, UBUNTU, 403, "Linux", input_items=[context, prompt])
+        send(host, inherited, UBUNTU, 200, "Linux", input_items=[
+            context, prompt, {"role": "assistant", "content": [{"type": "output_text", "text": "done"}]}, prompt])
         send(host, inherited, WINDOWS, 403, "Linux")
         rejected = send(host, windows, UBUNTU, 403, "Windows")
         send(host, windows, WINDOWS, 200, "Windows")
@@ -147,6 +169,13 @@ def verify(release, archive):
         second_id = send(host, inherited, UBUNTU, 403, "macOS")
         send(host, windows, WINDOWS, 200, "Windows")
         print("Verified outbound UA, global changes, and independent keys", flush=True)
+        send(host, windows, WINDOWS, 200, "Windows", turn_body={"sandbox": "windows_elevated"})
+        send(host, windows, WINDOWS, 200, "Windows", turn_body={"sandbox": "external"})
+        send(host, windows, WINDOWS, 200, "Windows", turn_body={"workspaces": {"//wsl.localhost/Ubuntu/home/name": {}}})
+        send(host, windows, WINDOWS, 403, "Windows", turn_header={"sandbox": "seatbelt"})
+        sandbox_id = send(host, windows, WINDOWS, 403, "Windows", turn_header={"sandbox": "windows_sandbox"},
+                          turn_body={"sandbox": "seccomp"})
+        print("Verified sandbox and workspace compatibility before upstream delivery", flush=True)
 
         account = host.admin("/api/admin/accounts?page=1&pageSize=20")["items"][0]
         assert account["name"] and account["name"] != account["id"]
@@ -160,12 +189,13 @@ def verify(release, archive):
         for _ in range(25):
             send(host, windows, UBUNTU, 403, "Windows")
         archived_id = verify_name_refresh(host, instance, rejected, account)
-        verify_page(host, instance, rejected, windows, account, archived_id)
-        latency = verify_storage(host, instance, rejected, windows, second_id)
+        verify_page(host, instance, rejected, windows, account, archived_id, path_id)
+        latency = verify_storage(host, instance, rejected, windows, second_id, sandbox_id, path_id)
         print("Verified SQLite records, rejection under write lock, and seven-day retention", flush=True)
     return {"packageSha256": digest, "lockedRejectionMs": latency, "checks": [
         "package-install", "outbound-platform", "global-inheritance", "key-override", "zero-upstream-on-denial",
-        "http-error", "streaming-http-error", "websocket-error", "sqlite-record", "write-lock", "retention",
+        "sandbox-platform", "workspace-path-platform", "stateless-current-input", "private-os-evidence", "http-error", "streaming-http-error",
+        "websocket-error", "sqlite-record", "write-lock", "retention",
         "private-management-route", "management-page-browser", "rejection-table",
         "cached-key-and-account-names", "background-name-refresh", "deleted-key-name",
     ]}

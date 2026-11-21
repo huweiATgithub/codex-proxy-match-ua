@@ -58,6 +58,9 @@ struct Entry {
     transport: String,
     reason: String,
     message: String,
+    evidence_field: Option<String>,
+    evidence_pattern: Option<String>,
+    evidence_platform: Option<String>,
     client_platform: Option<String>,
     effective_platform: Option<String>,
     client_ua: Option<String>,
@@ -83,6 +86,9 @@ impl Entry {
             transport: row.get("transport")?,
             reason: row.get("reason")?,
             message: row.get("message")?,
+            evidence_field: row.get("evidence_field")?,
+            evidence_pattern: row.get("evidence_pattern")?,
+            evidence_platform: row.get("evidence_platform")?,
             client_platform: row.get("client_platform")?,
             effective_platform: row.get("effective_platform")?,
             client_ua: row.get("client_ua")?,
@@ -125,9 +131,14 @@ impl Page {
         } else {
             "SELECT NULL, NULL, NULL WHERE FALSE"
         };
+        let evidence = if db.column_exists(None, "rejected_requests", "evidence_field")? {
+            ""
+        } else {
+            ", NULL AS evidence_field, NULL AS evidence_pattern, NULL AS evidence_platform"
+        };
         let sql = format!(
             "WITH names(kind, id, name) AS NOT MATERIALIZED ({directory})
-             SELECT r.*, NULLIF(k.name, '') AS client_key_name, NULLIF(a.name, '') AS account_name
+             SELECT r.*, NULLIF(k.name, '') AS client_key_name, NULLIF(a.name, '') AS account_name {evidence}
              FROM rejected_requests r
              LEFT JOIN names k ON k.kind = 'key' AND k.id = r.client_key_id
              LEFT JOIN names a ON a.kind = 'account' AND a.id = r.account_id

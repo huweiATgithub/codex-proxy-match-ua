@@ -10,28 +10,27 @@ use gateway_plugin_sdk::{
 };
 use serde_json::Value;
 
-use crate::platform::Rejection;
+pub const PUBLIC_MESSAGE: &str = "Request blocked by policy.";
 
-// The host creates a unique model request ID for every request, including each WS turn.
-// Its outbound policy error loses the plugin message before reaching the client.
+// Older hosts use different policy wording. Only normalize this plugin's own 403s.
 #[derive(Default)]
-pub struct PendingRequests(Mutex<HashMap<String, Option<Rejection>>>);
+pub struct PendingRequests(Mutex<HashMap<String, bool>>);
 
 impl PendingRequests {
-    fn entries(&self) -> MutexGuard<'_, HashMap<String, Option<Rejection>>> {
+    fn entries(&self) -> MutexGuard<'_, HashMap<String, bool>> {
         self.0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     fn track(&self, id: String) -> RequestScope<'_> {
-        self.entries().insert(id.clone(), None);
+        self.entries().insert(id.clone(), false);
         RequestScope { pending: self, id }
     }
 
-    pub fn reject(&self, id: &str, reason: Rejection) {
+    pub fn reject(&self, id: &str) {
         if let Some(entry) = self.entries().get_mut(id) {
-            *entry = Some(reason);
+            *entry = true;
         }
     }
 
@@ -43,16 +42,18 @@ impl PendingRequests {
         let is_websocket = call.request.head.transport == MiddlewareTransport::WebSocket;
         let scope = self.track(call.request.head.request_id.clone());
         let mut response = call.next.run(call.request).await?;
-        if response.status == 403
-            && let Some(reason) = scope.reason()
-        {
+        if response.status == 403 && scope.rejected() {
             if is_websocket {
-                websocket.insert(&call.context, &scope.id, reason);
+                websocket.insert(&call.context, &scope.id);
                 return Ok(response);
             }
             response.remove_header("content-length");
-            response.body = response.body.map_frames(move |mut frame| {
-                replace_message(&mut frame.payload, reason);
+            response.body = response.body.map_frames(|mut frame| {
+                if let Ok(mut body) = serde_json::from_slice(&frame.payload)
+                    && normalize(&mut body)
+                {
+                    frame.payload = body.to_string().into_bytes();
+                }
                 Ok(vec![frame])
             })?;
         }
@@ -67,8 +68,8 @@ struct RequestScope<'a> {
 }
 
 impl RequestScope<'_> {
-    fn reason(&self) -> Option<Rejection> {
-        self.pending.entries().get(&self.id).copied().flatten()
+    fn rejected(&self) -> bool {
+        self.pending.entries().get(&self.id) == Some(&true)
     }
 }
 
@@ -78,41 +79,41 @@ impl Drop for RequestScope<'_> {
     }
 }
 
-fn replace_message(payload: &mut Vec<u8>, reason: Rejection) {
-    let Ok(mut body) = serde_json::from_slice::<Value>(payload) else {
-        return;
-    };
+pub fn normalize(body: &mut Value) -> bool {
     if body.pointer("/error/code").and_then(Value::as_str) == Some("policy_denied")
         && let Some(message) = body.pointer_mut("/error/message")
+        && message.as_str() != Some(PUBLIC_MESSAGE)
     {
-        *message = Value::String(reason.to_string());
-        *payload = body.to_string().into_bytes();
+        *message = Value::String(PUBLIC_MESSAGE.into());
+        return true;
     }
+    false
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::Platform;
+    use serde_json::json;
 
     #[test]
-    fn only_the_rejected_request_gets_details_and_cancellation_releases_it() {
+    fn only_our_active_rejection_gets_the_generic_response() {
         let requests = PendingRequests::default();
         let first = requests.track("req_a".into());
         let second = requests.track("req_b".into());
-        let reason = Rejection {
-            client: Ok(Platform::Linux),
-            effective: Ok(Platform::Windows),
-        };
-        requests.reject("req_a", reason);
-        assert!(first.reason().is_some());
-        assert!(second.reason().is_none());
+        requests.reject("req_a");
+        assert!(first.rejected());
+        assert!(!second.rejected());
         drop(first);
-        requests.reject("req_a", reason);
+        requests.reject("req_a");
         assert_eq!(requests.entries().len(), 1);
-        let mut body = br#"{"error":{"code":"another_denial","message":"other"}}"#.to_vec();
-        let original = body.clone();
-        replace_message(&mut body, reason);
-        assert_eq!(body, original);
+
+        let mut unrelated = json!({"error":{"code":"another_denial","message":"other"}});
+        assert!(!normalize(&mut unrelated));
+        assert_eq!(unrelated["error"]["message"], "other");
+        let mut legacy = json!({"request_id":"req_a","error":{"code":"policy_denied","message":"request policy rejected the request"}});
+        assert!(normalize(&mut legacy));
+        assert_eq!(legacy["request_id"], "req_a");
+        assert_eq!(legacy["error"]["message"], PUBLIC_MESSAGE);
+        assert!(!normalize(&mut legacy));
     }
 }

@@ -1,5 +1,6 @@
 mod diagnostics;
 mod management;
+mod metadata;
 mod platform;
 mod response;
 mod websocket;
@@ -45,12 +46,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .format_response(*call, &ws)
                         .await
                         .map(MiddlewareResult::Request),
-                    MiddlewareCall::Outbound(call) => guard(*call, &pending, &diagnostics)
-                        .await
-                        .map(MiddlewareResult::Outbound),
                     MiddlewareCall::WebSocket(call) => {
                         ws.format(*call).await.map(MiddlewareResult::WebSocket)
                     }
+                    MiddlewareCall::Outbound(call) => guard(*call, &pending, &diagnostics)
+                        .await
+                        .map(MiddlewareResult::Outbound),
                     other => other.forward().await,
                 }
             }
@@ -92,8 +93,10 @@ async fn guard(
         .map_or(&[][..], |req| req.headers.as_slice());
     let client = UserAgent::read(incoming);
     let effective = UserAgent::read(&prepared.head.headers);
-    if let Err(reason) = Rejection::compare(&client, &effective) {
-        pending.reject(&call.metadata.request_id, reason);
+    let compatible = Rejection::compare(&client, &effective)
+        .and_then(|platform| metadata::check(&prepared, platform));
+    if let Err(reason) = compatible {
+        pending.reject(&call.metadata.request_id);
         diagnostics.submit(Record::new(
             &call.metadata,
             &prepared.head.target,
@@ -101,7 +104,10 @@ async fn guard(
             &effective,
             reason,
         ));
-        return Err(PluginFault::new(ErrorCode::Rejected, reason.to_string()));
+        return Err(PluginFault::new(
+            ErrorCode::Rejected,
+            response::PUBLIC_MESSAGE,
+        ));
     }
     Ok(prepared)
 }

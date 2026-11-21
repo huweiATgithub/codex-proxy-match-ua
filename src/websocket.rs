@@ -10,11 +10,11 @@ use gateway_plugin_sdk::{
 };
 use serde_json::Value;
 
-use crate::platform::Rejection;
+use crate::response;
 
 // A native WS policy failure is a standalone error event. Editing it as a model stream
 // frame triggers Responses lifecycle validation. Format the actual outgoing WS message.
-type Turns = HashMap<String, (Instant, Rejection)>;
+type Turns = HashMap<String, Instant>;
 
 #[derive(Default)]
 pub struct ErrorMessages(Mutex<HashMap<Vec<u8>, Turns>>);
@@ -39,29 +39,31 @@ impl ErrorMessages {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    pub fn insert(&self, context: &CallContext, request_id: &str, reason: Rejection) {
+    pub fn insert(&self, context: &CallContext, request_id: &str) {
         self.connections()
             .entry(handshake_key(context).to_vec())
             .or_default()
-            .insert(request_id.into(), (Instant::now(), reason));
+            .insert(request_id.into(), Instant::now());
     }
 
     pub fn expire(&self) {
         // A client may disconnect before its rejection is delivered.
         self.connections().retain(|_, turns| {
-            turns.retain(|_, (at, _)| at.elapsed() < Duration::from_secs(300));
+            turns.retain(|_, at| at.elapsed() < Duration::from_secs(300));
             !turns.is_empty()
         });
     }
 
-    fn take(&self, key: &[u8], request_id: &str) -> Option<Rejection> {
+    fn take(&self, key: &[u8], request_id: &str) -> bool {
         let mut connections = self.connections();
-        let turns = connections.get_mut(key)?;
-        let (_, reason) = turns.remove(request_id)?;
+        let Some(turns) = connections.get_mut(key) else {
+            return false;
+        };
+        let found = turns.remove(request_id).is_some();
         if turns.is_empty() {
             connections.remove(key);
         }
-        Some(reason)
+        found
     }
 
     pub async fn format(
@@ -87,9 +89,9 @@ impl ErrorMessages {
             && event["status"] == 403
             && event.pointer("/error/code").and_then(Value::as_str) == Some("policy_denied")
             && let Some(id) = event["request_id"].as_str()
-            && let Some(reason) = self.take(key, id)
+            && self.take(key, id)
+            && response::normalize(&mut event)
         {
-            event["error"]["message"] = Value::String(reason.to_string());
             bytes = event.to_string().into_bytes();
         }
         Ok(Some(WebSocketMessage::new(WebSocketKind::Text, bytes)))

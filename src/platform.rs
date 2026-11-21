@@ -1,3 +1,4 @@
+use crate::metadata::{Evidence, Field};
 use gateway_plugin_sdk::call::middleware::MiddlewareHeader;
 use std::fmt;
 
@@ -120,42 +121,81 @@ fn parse(bytes: &[u8]) -> Identified {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Rejection {
-    pub client: Identified,
-    pub effective: Identified,
+pub enum Rejection {
+    UserAgents {
+        client: Identified,
+        effective: Identified,
+    },
+    Metadata {
+        evidence: Evidence,
+        effective: Platform,
+    },
 }
 
 impl Rejection {
-    pub fn compare(client: &UserAgent<'_>, effective: &UserAgent<'_>) -> Result<(), Self> {
-        if matches!((client.platform, effective.platform), (Ok(a), Ok(b)) if a == b) {
-            Ok(())
-        } else {
-            Err(Self {
-                client: client.platform,
-                effective: effective.platform,
-            })
+    pub fn compare(client: &UserAgent<'_>, effective: &UserAgent<'_>) -> Result<Platform, Self> {
+        match (client.platform, effective.platform) {
+            (Ok(a), Ok(b)) if a == b => Ok(b),
+            (client, effective) => Err(Self::UserAgents { client, effective }),
         }
     }
 
     pub fn reason(self) -> &'static str {
-        match (self.client, self.effective) {
-            (Err(_), Err(_)) => "both_uas_unusable",
-            (Err(_), _) => "client_ua_unusable",
-            (_, Err(_)) => "effective_ua_unusable",
-            _ => "platform_mismatch",
+        match self {
+            Self::UserAgents {
+                client: Err(_),
+                effective: Err(_),
+            } => "both_uas_unusable",
+            Self::UserAgents { client: Err(_), .. } => "client_ua_unusable",
+            Self::UserAgents {
+                effective: Err(_), ..
+            } => "effective_ua_unusable",
+            Self::UserAgents { .. } => "platform_mismatch",
+            Self::Metadata {
+                evidence:
+                    Evidence {
+                        field: Field::Sandbox(_),
+                        ..
+                    },
+                ..
+            } => "sandbox_platform_mismatch",
+            Self::Metadata { .. } => "path_os_mismatch",
+        }
+    }
+
+    pub fn evidence(self) -> Option<Evidence> {
+        match self {
+            Self::Metadata { evidence, .. } => Some(evidence),
+            Self::UserAgents { .. } => None,
         }
     }
 }
 
 impl fmt::Display for Rejection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (client, effective) = match *self {
+            Self::UserAgents { client, effective } => (client, effective),
+            Self::Metadata {
+                evidence,
+                effective,
+            } => {
+                return write!(
+                    f,
+                    "{} matches {} ({}). The effective User-Agent for this key requires {}.",
+                    evidence.field,
+                    evidence.pattern,
+                    evidence.platform.name(),
+                    effective.name()
+                );
+            }
+        };
         f.write_str("UA incompatible. The client User-Agent ")?;
-        match self.client {
+        match client {
             Ok(platform) => write!(f, "reports {}", platform.name())?,
             Err(issue) => f.write_str(issue.explanation())?,
         }
         f.write_str(". The effective User-Agent for this key ")?;
-        match self.effective {
+        match effective {
             Ok(platform) => write!(f, "requires {}.", platform.name()),
             Err(issue) => write!(f, "{}.", issue.explanation()),
         }
